@@ -365,16 +365,14 @@ export class ReposList extends React.Component<
                                     )}
                                     qeId='type-menu'
                                 />
-                                <DataLoader load={services.repos.list} ref={loader => (this.repoLoader = loader)}>
-                                    {(repos: models.Repository[]) => {
-                                        const projectValues = Array.from(new Set(repos.map(repo => repo.project)));
-
+                                <DataLoader load={() => services.projects.list('items.metadata.name').then(projects => projects.map(proj => proj.metadata.name).sort())}>
+                                    {(projects: string[]) => {
                                         const projectItems = [
                                             {
                                                 title: 'all',
                                                 action: () => this.setState({projectProperty: 'all'})
                                             },
-                                            ...projectValues
+                                            ...projects
                                                 .filter(project => project && project.trim() !== '')
                                                 .map(project => ({
                                                     title: project,
