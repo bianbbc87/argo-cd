@@ -81,7 +81,7 @@ export class EditablePanel<T = {}> extends React.Component<EditablePanelProps<T>
                             <div className='white-box__details'>
                                 {!this.props.noReadonlyMode && this.props.save && (
                                     <div className='editable-panel__buttons' style={{right: this.props.collapsible ? '5em' : '3em'}}>
-                                        {this.props.registered && (
+                                        {!this.state.edit && (
                                             <button
                                                 onClick={() => {
                                                     this.setState({edit: true});
