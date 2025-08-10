@@ -141,10 +141,11 @@ export class ReposList extends React.Component<
         currentRepo: models.Repository;
         currentApplications: models.Application[];
         displayEditPanel: boolean;
+        displayViewPanel: boolean;
         authSettings: models.AuthSettings;
-        statusProperty: 'all' | 'Successful' | 'Failed' | 'Unknown';
+        statusProperty: 'all' | 'Successful' | 'Failed' | 'Unknown' | 'Not Registered';
         projectProperty: string;
-        typeProperty: 'all' | 'git' | 'helm';
+        typeProperty: 'all' | 'git' | 'helm' | 'oci';
         name: string;
     }
 > {
@@ -167,6 +168,7 @@ export class ReposList extends React.Component<
             currentRepo: null,
             currentApplications: null,
             displayEditPanel: false,
+            displayViewPanel: false,
             authSettings: null,
             statusProperty: 'all',
             projectProperty: 'all',
@@ -282,8 +284,8 @@ export class ReposList extends React.Component<
                         </button>
                     </>
                 )}
-                {this.state.displayEditPanel && (
-                    <button onClick={() => this.setState({displayEditPanel: false})} className='argo-button argo-button--base-o'>
+                {(this.state.displayEditPanel || this.state.displayViewPanel) && (
+                    <button onClick={() => this.setState({displayEditPanel: false, displayViewPanel: false})} className='argo-button argo-button--base-o'>
                         Cancel
                     </button>
                 )}
@@ -347,6 +349,10 @@ export class ReposList extends React.Component<
                                         {
                                             title: 'helm',
                                             action: () => this.setState({typeProperty: 'helm'})
+                                        },
+                                        {
+                                            title: 'oci',
+                                            action: () => this.setState({typeProperty: 'oci'})
                                         }
                                     ]}
                                     anchor={() => (
@@ -409,6 +415,10 @@ export class ReposList extends React.Component<
                                         {
                                             title: 'Unknown',
                                             action: () => this.setState({statusProperty: 'Unknown'})
+                                        },
+                                        {
+                                            title: 'Not Registered',
+                                            action: () => this.setState({statusProperty: 'Not Registered'})
                                         }
                                     ]}
                                     anchor={() => (
@@ -426,19 +436,33 @@ export class ReposList extends React.Component<
                             <input type='text' className='argo-field' placeholder='Search Name' value={this.state.name} onChange={e => this.setState({name: e.target.value})} />
                         </div>
                         <DataLoader load={() => services.applications.list([])}>
-                            {applications => (
-                                <DataLoader load={services.repos.list} ref={loader => (this.repoLoader = loader)}>
-                                    {(repos: models.Repository[]) => {
-                                        const filteredRepos = this.filteredRepos(
-                                            repos,
-                                            this.state.typeProperty,
-                                            this.state.projectProperty,
-                                            this.state.statusProperty,
-                                            this.state.name
-                                        );
+                            {(applications: models.ApplicationList) => {
+                                const appRepos = this.mapApplicationsToRepoItems(applications.items);
+                                return (
+                                    <DataLoader load={services.repos.list} ref={loader => (this.repoLoader = loader)}>
+                                        {(repos: models.Repository[]) => {
+                                            // Collect original repo URLs from the server-side repository list
+                                            const existingOriginalRepoUrls = new Set(repos.map(r => r.repo));
+                                            const appReposUnique = appRepos.filter(r => !existingOriginalRepoUrls.has(r.repo));
 
-                                        return (
-                                            (filteredRepos.length > 0 && (
+                                            // Apply UI filters to the original repositories
+                                            const filteredRepos = this.filteredRepos(
+                                                repos,
+                                                this.state.typeProperty,
+                                                this.state.projectProperty,
+                                                this.state.statusProperty,
+                                                this.state.name
+                                            );
+
+                                            const filteredAppRepos = this.filteredRepos(
+                                                appReposUnique,
+                                                this.state.typeProperty,
+                                                this.state.projectProperty,
+                                                this.state.statusProperty,
+                                                this.state.name
+                                            );
+
+                                            return filteredRepos.length > 0 || filteredAppRepos.length > 0 ? (
                                                 <div className='argo-table-list'>
                                                     <div className='argo-table-list__head'>
                                                         <div className='row'>
@@ -451,6 +475,68 @@ export class ReposList extends React.Component<
                                                             <div className='columns small-2'>CONNECTION STATUS</div>
                                                         </div>
                                                     </div>
+                                                    {/** repos from application **/}
+                                                    {filteredAppRepos.map(repo => {
+                                                        const repoApps = applications.items.filter(app => {
+                                                            return (
+                                                                app.spec?.project === repo.project &&
+                                                                (app.spec?.source?.repoURL === repo.repo || app.spec?.sources?.some(src => src.repoURL === repo.repo))
+                                                            );
+                                                        });
+
+                                                        return (
+                                                            <div
+                                                                className={`argo-table-list__row ${this.isRepoUpdatable(repo) ? 'item-clickable' : ''}`}
+                                                                key={repo.repo}
+                                                                onClick={() => (this.isRepoUpdatable(repo) ? this.displayViewSliding(repo, repoApps) : null)}>
+                                                                <div className='row'>
+                                                                    <div className='columns small-1'>
+                                                                        <i className={'icon argo-icon-' + (repo.type || 'git')} />
+                                                                    </div>
+                                                                    <div className='columns small-1'>
+                                                                        <span>{repo.type || 'git'}</span>
+                                                                        {repo.enableOCI && <span> OCI</span>}
+                                                                    </div>
+                                                                    <div className='columns small-2'>
+                                                                        <Tooltip content={repo.name}>
+                                                                            <span>{repo.name}</span>
+                                                                        </Tooltip>
+                                                                    </div>
+                                                                    <div className='columns small-1'>
+                                                                        <Tooltip content={repo.project}>
+                                                                            <span>{repo.project}</span>
+                                                                        </Tooltip>
+                                                                    </div>
+                                                                    <div className='columns small-1'>{repoApps.length}</div>
+                                                                    <div className='columns small-4'>
+                                                                        <Tooltip content={repo.repo}>
+                                                                            <span>
+                                                                                <Repo url={repo.repo} />
+                                                                            </span>
+                                                                        </Tooltip>
+                                                                    </div>
+                                                                    <div className='columns small-2'>
+                                                                        <ConnectionStateIcon state={repo.connectionState} /> {repo.connectionState.status}
+                                                                        <DropDownMenu
+                                                                            anchor={() => (
+                                                                                <button className='argo-button argo-button--light argo-button--lg argo-button--short'>
+                                                                                    <i className='fa fa-ellipsis-v' />
+                                                                                </button>
+                                                                            )}
+                                                                            items={[
+                                                                                {
+                                                                                    title: 'Connect Repository',
+                                                                                    action: () => (this.showConnectRepo = true)
+                                                                                }
+                                                                            ]}
+                                                                        />
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                    {filteredAppRepos.length > 0 && <hr />}
+                                                    {/** repos from repository **/}
                                                     {filteredRepos.map(repo => {
                                                         const repoApps = applications.items.filter(app => {
                                                             return (
@@ -518,16 +604,16 @@ export class ReposList extends React.Component<
                                                         );
                                                     })}
                                                 </div>
-                                            )) || (
+                                            ) : (
                                                 <EmptyState icon='argo-icon-git'>
                                                     <h4>No repositories connected</h4>
                                                     <h5>Connect your repo to deploy apps.</h5>
                                                 </EmptyState>
-                                            )
-                                        );
-                                    }}
-                                </DataLoader>
-                            )}
+                                            );
+                                        }}
+                                    </DataLoader>
+                                );
+                            }}
                         </DataLoader>
                     </div>
                     <div className='argo-container'>
@@ -705,13 +791,16 @@ export class ReposList extends React.Component<
                     )}
                 </div>
                 <SlidingPanel
-                    isShown={this.showConnectRepo || this.state.displayEditPanel}
+                    isShown={this.showConnectRepo || this.state.displayEditPanel || this.state.displayViewPanel}
                     onClose={() => {
-                        if (!this.state.displayEditPanel && this.showConnectRepo) {
+                        if (!this.state.displayEditPanel && !this.state.displayViewPanel && this.showConnectRepo) {
                             this.showConnectRepo = false;
                         }
                         if (this.state.displayEditPanel) {
                             this.setState({displayEditPanel: false});
+                        }
+                        if (this.state.displayViewPanel) {
+                            this.setState({displayViewPanel: false});
                         }
                     }}
                     header={this.SlidingPanelHeader()}>
@@ -724,9 +813,11 @@ export class ReposList extends React.Component<
                             repo={this.state.currentRepo}
                             applications={this.state.currentApplications}
                             save={(params: NewHTTPSRepoParams) => this.updateHTTPSRepo(params)}
+                            registered={true}
                         />
                     )}
-                    {!this.state.displayEditPanel && (
+                    {this.state.displayViewPanel && <RepoDetails repo={this.state.currentRepo} applications={this.state.currentApplications} registered={false} />}
+                    {!this.state.displayEditPanel && !this.state.displayViewPanel && (
                         <DataLoader load={() => services.projects.list('items.metadata.name').then(projects => projects.map(proj => proj.metadata.name).sort())}>
                             {projects => (
                                 <Form
@@ -1017,6 +1108,12 @@ export class ReposList extends React.Component<
         this.setState({currentRepo: repo});
         this.setState({currentApplications: applications});
         this.setState({displayEditPanel: true});
+    }
+
+    private displayViewSliding(repo: models.Repository, applications: models.Application[]) {
+        this.setState({currentRepo: repo});
+        this.setState({currentApplications: applications});
+        this.setState({displayViewPanel: true});
     }
 
     // Whether url is a http or https url
@@ -1331,9 +1428,43 @@ export class ReposList extends React.Component<
         }
     }
 
+    // mapping applications item to repository model
+    private mapApplicationsToRepoItems(applications: models.Application[]): models.Repository[] {
+        const repos: models.Repository[] = [];
+
+        applications.forEach(app => {
+            const repoUrls: string[] = [app.spec?.source?.repoURL, ...(app.spec?.sources?.map(src => src.repoURL) ?? [])].filter((url): url is string => !!url);
+
+            const project = app.spec?.project;
+
+            if (repoUrls.length > 0) {
+                repoUrls.forEach(url => {
+                    repos.push({
+                        project: project,
+                        repo: url,
+                        type: url.startsWith('oci://') ? 'helm' : app.spec?.source?.chart ? 'helm' : 'git',
+                        name: '',
+                        connectionState: {
+                            status: 'Not Registered',
+                            message: '',
+                            attemptedAt:
+                                app.status?.operationState?.finishedAt ||
+                                app.status?.history?.[0]?.deployedAt ||
+                                app.status?.conditions?.[0]?.lastTransitionTime ||
+                                app.metadata?.creationTimestamp
+                        },
+                        enableOCI: url.startsWith('oci://'),
+                        useAzureWorkloadIdentity: false
+                    });
+                });
+            }
+        });
+        return repos;
+    }
+
     // filtering function
     private filteredRepos(repos: models.Repository[], type: string, project: string, status: string, name: string) {
-        let newRepos = repos;
+        let newRepos = [...repos];
 
         if (name && name.trim() !== '') {
             const response = this.filteredName(newRepos, name);

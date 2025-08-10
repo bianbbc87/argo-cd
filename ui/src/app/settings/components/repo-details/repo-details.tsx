@@ -8,9 +8,9 @@ import {NewHTTPSRepoParams} from '../repos-list/repos-list';
 import {AuthSettingsCtx} from '../../../shared/context';
 import * as AppUtils from '../../../applications/components/utils';
 
-export const RepoDetails = (props: {repo: models.Repository; applications: models.Application[]; save?: (params: NewHTTPSRepoParams) => Promise<void>}) => {
+export const RepoDetails = (props: {repo: models.Repository; applications: models.Application[]; save?: (params: NewHTTPSRepoParams) => Promise<void>; registered: boolean}) => {
     const useAuthSettingsCtx = React.useContext(AuthSettingsCtx);
-    const {repo, applications, save} = props;
+    const {repo, applications, save, registered} = props;
     const write = false;
     const FormItems = (repository: models.Repository): EditablePanelItem[] => {
         const items: EditablePanelItem[] = [
@@ -143,7 +143,8 @@ export const RepoDetails = (props: {repo: models.Repository; applications: model
                 params.bearerToken = input.bearerToken || '';
                 save(params);
             }}
-            title='CONNECTED REPOSITORY'
+            registered={registered}
+            title={registered ? 'CONNECTED REPOSITORY' : 'NOT CONNECTED REPOSITORY'}
             items={FormItems(repo)}
         />
     );
