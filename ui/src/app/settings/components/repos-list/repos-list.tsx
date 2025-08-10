@@ -526,7 +526,24 @@ export class ReposList extends React.Component<
                                                                             items={[
                                                                                 {
                                                                                     title: 'Connect Repository',
-                                                                                    action: () => (this.showConnectRepo = true)
+                                                                                    action: () => {
+                                                                                        this.showConnectRepo = true;
+                                                                                        this.formApi.setValue('url', repo.repo);
+                                                                                        this.formApi.setValue('project', repo.project);
+                                                                                        if (repo.type === 'git') {
+                                                                                            this.setState({method: ConnectionMethod.SSH});
+                                                                                        } else {
+                                                                                            this.setState({method: ConnectionMethod.HTTPS});
+                                                                                            this.formApi.setValue('type', repo.type);
+                                                                                        }
+                                                                                    }
+                                                                                },
+                                                                                {
+                                                                                    title: 'Create application',
+                                                                                    action: () =>
+                                                                                        this.appContext.apis.navigation.goto('/applications', {
+                                                                                            new: JSON.stringify({spec: {source: {repoURL: repo.repo}}})
+                                                                                        })
                                                                                 }
                                                                             ]}
                                                                         />
