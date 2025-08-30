@@ -440,8 +440,8 @@ export class ReposList extends React.Component<
                                     <DataLoader load={services.repos.list} ref={loader => (this.repoLoader = loader)}>
                                         {(repos: models.Repository[]) => {
                                             // Collect original repo URLs from the server-side repository list
-                                            const existingOriginalRepoUrls = new Set(repos.map(r => r.repo));
-                                            const appReposUnique = appRepos.filter(r => !existingOriginalRepoUrls.has(r.repo));
+                                            const existingOriginalRepoUrls = new Set(repos.map(r => this.normalizeRepoUrl(r.repo)));
+                                            const appReposUnique = appRepos.filter(r => !existingOriginalRepoUrls.has(this.normalizeRepoUrl(r.repo)));
 
                                             // Apply UI filters to the original repositories
                                             const filteredRepos = this.filteredRepos(
@@ -556,7 +556,8 @@ export class ReposList extends React.Component<
                                                         const repoApps = applications.items.filter(app => {
                                                             return (
                                                                 app.spec?.project === repo.project &&
-                                                                (app.spec?.source?.repoURL === repo.repo || app.spec?.sources?.some(src => src.repoURL === repo.repo))
+                                                                (this.normalizeRepoUrl(app.spec?.source?.repoURL ?? '') === this.normalizeRepoUrl(repo.repo) ||
+                                                                    app.spec?.sources?.some(src => this.normalizeRepoUrl(src.repoURL) === this.normalizeRepoUrl(repo.repo)))
                                                             );
                                                         });
 
@@ -1442,6 +1443,8 @@ export class ReposList extends React.Component<
             }
         }
     }
+
+    private normalizeRepoUrl = (url: string): string => url.replace(/\.git$/, '');
 
     // mapping applications item to repository model
     private mapApplicationsToRepoItems(applications: models.Application[]): models.Repository[] {
